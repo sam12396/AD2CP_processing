@@ -15,10 +15,6 @@
 % Sam Coakley
 % 2/27/2019
 
-%% Note
-% This assumes that all the profiles begin at the surface by saying that
-% each profile starts at d_min.
-
 %% Starters
 clear all; close all
 deployment='ru31_467_2016_01_13';
