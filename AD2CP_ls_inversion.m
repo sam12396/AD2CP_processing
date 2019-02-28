@@ -15,6 +15,10 @@
 % Sam Coakley
 % 2/27/2019
 
+%% Note
+% This assumes that all the profiles begin at the surface by saying that
+% each profile starts at d_min.
+
 %% Starters
 clear all; close all
 deployment='ru31_467_2016_01_13';
@@ -120,7 +124,7 @@ v=imag(O_ls);
 % Find min and max depth range for the grid from bnew
 d_min=min(bnew);
 d_max=max(bnew);
-
+dz=bnew(2)-bnew(1);
 % Find the necessary number of depth bins
 bin_num=((d_max-d_min)./dz)+1; % Add 1 to account for d_min bin
 % Number of profile columns needed to fill with ocean velocity data
@@ -133,20 +137,22 @@ vgrid=nan([bin_num prof_num]);
 grid_bin=(d_min:dz:d_max)';
 
 % Populate the grid
-profile_ind=find(bnew==d_min); % Index of the start of each profile
+profile_ind=[NaN; find(diff(bnew)<0)]+1; % Index of the start of each profile
 
 for ii=1:length(profile_ind)-1
-    % Grabs one profile of data
-    prof_bins=bnew(profile_ind(ii):profile_ind(ii+1)-1)';
-    prof_u   =u(profile_ind(ii):profile_ind(ii+1)-1)';
-    prof_v   =v(profile_ind(ii):profile_ind(ii+1)-1)';
+    if ~isnan(profile_ind(ii))
+        % Grabs one profile of data
+        prof_bins=bnew(profile_ind(ii):profile_ind(ii+1)-1)';
+        prof_u   =u(profile_ind(ii):profile_ind(ii+1)-1)';
+        prof_v   =v(profile_ind(ii):profile_ind(ii+1)-1)';
     
-    % Finds the depths to at which to insert this data into the grid
-    [~, grid_start]=min(prof_bins);
-    [~, grid_end]=max(prof_bins);
+        % Finds the depths to at which to insert this data into the grid
+        [~, grid_start]=min(prof_bins);
+        [~, grid_end]=max(prof_bins);
     
-    ugrid(grid_start:grid_end,ii)=prof_u;
-    vgrid(grid_start:grid_end,ii)=prof_v;
+        ugrid(grid_start:grid_end,ii)=prof_u;
+        vgrid(grid_start:grid_end,ii)=prof_v;
+    end
 end
     clear prof_u prof_v prof_bins grid_start grid_end
 
