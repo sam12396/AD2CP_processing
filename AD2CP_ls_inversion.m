@@ -133,7 +133,7 @@ vgrid=nan([bin_num prof_num]);
 grid_bin=(d_min:dz:d_max)';
 
 % Populate the grid
-profile_ind=[NaN; find(diff(bnew)<0)]+1; % Index of the start of each profile
+profile_ind=[0; find(diff(bnew)<0)]+1; % Index of the start of each profile
 
 for ii=1:length(profile_ind)-1
     if ~isnan(profile_ind(ii))
