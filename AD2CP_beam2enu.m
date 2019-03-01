@@ -83,17 +83,22 @@ zrng = pressure(k) + zrng; % this is a real bin depth now
 
             % Creates a field with the real bin depth
             X.r(kk,:) = zrng.'; 
-            
             % Change the beam data being used for up or down cast. The beam
             % orientation is 1=Forward; 2 and 4=Port and Starboard; 3= Aft.
-            if pitch(k) < 0
+            % +-15° removes data from when the glider is inflecting. Skip
+            % anything with too great of a roll.
+            if pitch(k) < -15 && abs(roll(k))>10
             X.e(kk,:)=enu124(1,:);
             X.n(kk,:)=enu124(2,:);
             X.u(kk,:)=enu124(3,:);
-            else
+            elseif pitch(k) > 15 && abs(roll(k))>10
             X.e(kk,:)=enu234(1,:);
             X.n(kk,:)=enu234(2,:);
             X.u(kk,:)=enu234(3,:);
+            else
+            X.e(kk,:)=nan(size(enu124));
+            X.n(kk,:)=nan(size(enu124));
+            X.u(kk,:)=nan(size(enu124));                
             end
 kk=kk+1;
 
