@@ -25,11 +25,8 @@ fig_path=['/Users/samcoa/Documents/MATLAB/ADCP_Wave/Figures/' deployment '/'];
 
 % Switch to run the inversion or not. This is to save time if you want to
 % plot but do not need to re-run the data analysis.
-if isfile([data_path deployment '_ocean_glider_velo.mat'])
-    run_inv=0;
-else
-    run_inv=1;
-end
+prompt='Run the inversions? (1=run 0=skip)';
+run_inv=input(prompt)
 
 %% Load in glider data
 load(g_path);
@@ -37,18 +34,36 @@ load(g_path);
 seg_start=dgroup.startDatenums;
 seg_end  =dgroup.endDatenums;
 
-% Get the dead reckoned glider velocity for each segment
-% There are more values of velocity than there are segments so average them
-% together? This is not publication ready data analysis
-data=toArray(dgroup,'sensors',{'m_water_vx','m_water_vy'});
-mean_water_vx=nan(length(seg_start),1);
-mean_water_vy=nan(length(seg_start),1);
-for jj=1:length(seg_start)
-    segs=seg_start(jj);
-    sege=seg_end(jj);
-    seg_data= data(:,1)>= segs & data(:,1)<sege ;
-    mean_water_vx(jj)=nanmean(data(seg_data,3));
-    mean_water_vy(jj)=nanmean(data(seg_data,4));
+% Number of profile columns needed to fill with ocean velocity data when
+% building the grid
+prof_num=length(seg_start);
+
+% Calculate the dead reckoned glider velocity for each segment
+[DRx,DRy]=dead_reckon(dgroup);
+% Remove outliers from the calculation
+mean_x=nanmean(DRx);
+mean_y=nanmean(DRy);
+std_x=std(DRx);
+std_y=std(DRy);
+threshold=5;
+keep  =DRx > (mean_x-threshold.*std_x) & DRx < (mean_x+threshold.*std_x) ...
+     & DRy > (mean_y-threshold.*std_y) & DRy < (mean_y+threshold.*std_y);
+% Make bad data into NaNs
+DRx(~keep)=NaN;
+DRy(~keep)=NaN;
+
+% Calculate the segment mean of the max water column depth
+[col_depth]=toArray(dgroup,'sensors',{'m_water_depth'});
+% Sometimes the m_water_depth records negative values for water column
+% depth
+ind= col_depth(:,3) > 1;
+col_depth=col_depth(ind,:);
+
+seg_mean_depth=nan(1,length(seg_start));
+for ii=1:length(seg_start)
+    seg_ind= col_depth(:,1)>= seg_start(ii) & col_depth(:,1)<seg_end(ii);
+    
+    seg_mean_depth(ii)=nanmean(col_depth(seg_ind,3));
 end
 
 %% Load in AD2CP data for this segment
@@ -57,13 +72,16 @@ bin_num=ncread(ad2cp_path,'Average_Range');
 bin_num=size(bin_num,2);
 
 % Load AD2CP time to use it as an index to pull out just one segment
-a_time=ncread(ad2cp_path,'Average_MatlabTimeStamp');
+a_time=ncread(ad2cp_path,'Average_TrimMatlabTimeStamp');
 
-if run_inv==1 % Only run this loop if the data has not already been processed
+if run_inv==1 % Only run this loop if user input confirms
     O_ls=[];
     G_ls=[];
     bnew=[];
     C=[];
+    segs_used=[];
+    dz=NaN;
+    data_threshold=0.9;
     for jj=1:length(seg_start) % Loop through each segment
     % Find the AD2CP data inside a segment
     seg_time_ind= a_time>=seg_start(jj) & a_time<seg_end(jj);
@@ -72,25 +90,59 @@ if run_inv==1 % Only run this loop if the data has not already been processed
     seg_time_start=find(seg_time_ind,1,'first');
     seg_time_end=find(seg_time_ind,1,'last');
     seg_count=length(seg_time_start:seg_time_end);
-    
-    % E/W velocity
-    u=ncread(ad2cp_path,'Average_EVelocity',[seg_time_start 1],[seg_count bin_num]); 
-    % N/S velocity
-    v=ncread(ad2cp_path,'Average_NVelocity',[seg_time_start 1],[seg_count bin_num]); 
-    % Depth of measurements
-    z=ncread(ad2cp_path,'Average_Depth',[seg_time_start 1],[seg_count bin_num]); 
 
-    if jj==1 
-        % How do we want to set dz to? 
-        dz=ceil(z(1,2)-z(1,1)).*2; %Desired resolution of final profile
-    end
-    
-    [tO_ls,tG_ls,tbnew,tC] = inversion_leastSquare_sparse_2019(u,v,z,dz,[0 0]);
+    if seg_count~=0 && ~isnan(DRx(jj))% If there is ad2cp data and glider velcoity data in the segment
+        % E/W velocity
+        u=ncread(ad2cp_path,'Average_EVelocity',[seg_time_start 1],[seg_count bin_num]); 
+        % N/S velocity
+        v=ncread(ad2cp_path,'Average_NVelocity',[seg_time_start 1],[seg_count bin_num]); 
+        % Depth of measurements
+        z=ncread(ad2cp_path,'Average_Depth',[seg_time_start 1],[seg_count bin_num]); 
 
-    O_ls=[O_ls; tO_ls];
-    G_ls=[G_ls; tG_ls];
-    bnew=[bnew; tbnew'];
-    C   =[C; tC];    
+        if isnan(dz) 
+            % How do we want to set dz to? 
+            dz=ceil(z(1,2)-z(1,1)).*2; %Desired resolution of final profile
+        end
+        
+        % Make all values below the depth of the water column NaN because
+        % they are false returns
+        kk= z>=seg_mean_depth(jj);
+        u(kk)=NaN;
+        v(kk)=NaN;
+        z(kk)=NaN;
+
+        % There is no solution if there is only one bin in a profile so
+        % remove all ensembles that are almost all NaNs.
+        a=nansum(isnan(u),2); u_ind= a>=size(u,2)-1;
+        a=nansum(isnan(v),2); v_ind= a>=size(u,2)-1;
+        nan_ens=u_ind+v_ind; % nans_ens==2 shows that the ensemble is nan in both variables
+        u(nan_ens==2,:)=[];
+        v(nan_ens==2,:)=[];
+        z(nan_ens==2,:)=[];
+% %         %%% This chops ad2cp bins not depth bins. I want to remove depth
+% %         %%% bins from the inversion that dont have enough data 
+% % %         % Check amount of NaNs in each bin for this segment of data and
+% % %         % chop bins that have too high of a percent NaN
+% % %         percent_good=(sum(~isnan(u),1))./size(u,1); % Find the percent of good data in each bin
+% % %         last_good_bin=find(percent_good>0.90,1,'last'); % Find the last bin with 90% good data
+% % %         u=u(:,1:last_good_bin); % Trim this segment to only bins with mostly good data
+% % %         v=v(:,1:last_good_bin);
+% % %         z=z(:,1:last_good_bin);
+
+        if (floor((nanmax(z(:))-nanmin(z(:)))/dz))>3  ... % Only do the inversion if there is enough bins
+                && (nansum(isnan(u(:)))/length(u(:)))<=data_threshold
+        [tO_ls,tG_ls,tbnew,tC] = inversion_leastSquare_sparse_2019...
+            (u,v,z,dz,seg_mean_depth(jj),[DRx(jj) DRy(jj)]);
+
+        % Maybe cut nans below max depth here
+        
+        O_ls=[O_ls; tO_ls];
+        G_ls=[G_ls; tG_ls];
+        bnew=[bnew; tbnew'];
+        C   =[C; tC];
+        segs_used=[segs_used; jj];
+        end
+    end % end seg_count if
     
         % Display progress through the loop
     if jj==floor(length(seg_start)*.25)
@@ -100,10 +152,11 @@ if run_inv==1 % Only run this loop if the data has not already been processed
     elseif jj==floor(length(seg_start)*.75)
         disp('75% of the way through separating ocean and glider velocity')
     end
+    
     end %end segment loop
     clear u v z seg_time_start seg_time_end seg_count seg_time_ind tC tG_ls tO_ls tbnew
 
-    save([data_path deployment '_ocean_glider_velo.mat'], 'O_ls', 'G_ls', 'bnew', 'C');
+    save([data_path deployment '_ocean_glider_velo.mat'], 'O_ls', 'G_ls', 'bnew', 'C', 'segs_used');
 else
 
     load([data_path deployment '_ocean_glider_velo.mat'])
@@ -123,8 +176,6 @@ d_max=max(bnew);
 dz=bnew(2)-bnew(1);
 % Find the necessary number of depth bins
 bin_num=((d_max-d_min)./dz)+1; % Add 1 to account for d_min bin
-% Number of profile columns needed to fill with ocean velocity data
-prof_num=length(seg_start);
 
 % Create the grid
 ugrid=nan([bin_num prof_num]);
@@ -146,20 +197,29 @@ for ii=1:length(profile_ind)-1
         [~, grid_start]=min(prof_bins);
         [~, grid_end]=max(prof_bins);
     
-        ugrid(grid_start:grid_end,ii)=prof_u;
-        vgrid(grid_start:grid_end,ii)=prof_v;
+        % Fills the grid using only bins used in each segment and only into
+        % columns for the segments that have AD2CP data
+        ugrid(grid_start:grid_end,segs_used(ii))=prof_u;
+        vgrid(grid_start:grid_end,segs_used(ii))=prof_v;
     end
 end
+
+% QA/QC to remove physically impossible velocities
+vel_threshold=1.5;
+vel_ind= abs(ugrid)>vel_threshold | abs(vgrid)>vel_threshold ;
+ugrid(vel_ind)=NaN;
+vgrid(vel_ind)=NaN;
+    save([data_path deployment '_ocean_velo_grid.mat'], 'ugrid', 'vgrid', 'grid_bin', 'seg_start', 'seg_end');
     clear prof_u prof_v prof_bins grid_start grid_end
-
 %% Plot the gridded ocean velocity data
-
+close all
 % Get some colorbar limits. Define limits the same for u and v
 tolerance=3; % standard deviation tolerance for the colorbar limits
 velo=[u;v];
 mvelo=nanmean(velo);
 stdvelo=nanstd(velo);
-clim=[mvelo-tolerance.*stdvelo mvelo+tolerance.*stdvelo];
+% Center the limit bar at 0
+clim=[-(mvelo+tolerance.*stdvelo) mvelo+tolerance.*stdvelo];
 
 % Set plotting constants
 cmap=cmocean('delta');
@@ -176,10 +236,11 @@ ax.CLim=clim;
 xlabel('Segment number')
 ylabel('Depth [m]')
 colormap(cmap)
-title([deployment ': East (+)/ West(-) Ocean velocity [m/s]'],'Interpreter','none')
+title([deployment ': East (+)/ West(-) Ocean velocity [m/s]' ...
+    '[Vertical resolution:' num2str(grid_bin(2)-grid_bin(1)) 'm]'],'Interpreter','none')
 print([fig_path 'u_ocean_velocity_cs'],'-dpng')
-close all
-clear ax cb cb_label
+% close all
+% clear ax cb cb_label
 
 figure(2)
 pcolorjw(1:prof_num,-grid_bin,vgrid)
@@ -192,7 +253,8 @@ ax.CLim=clim;
 xlabel('Segment number')
 ylabel('Depth [m]')
 colormap(cmap)
-title([deployment ': North (+)/ South(-) Ocean velocity [m/s]'],'Interpreter','none')
+title([deployment ': North (+)/ South(-) Ocean velocity [m/s]' ...
+    '[Vertical resolution:' num2str(grid_bin(2)-grid_bin(1)) 'm]'],'Interpreter','none')
 print([fig_path 'v_ocean_velocity_cs'],'-dpng')
-close all
-clear ax cb cb_label
+% close all
+% clear ax cb cb_label
