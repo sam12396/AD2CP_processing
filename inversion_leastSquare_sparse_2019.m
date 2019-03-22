@@ -1,9 +1,10 @@
-function [O_ls,G_ls,bnew,C] = inversion_leastSquare_sparse_2019(U,V,Z,dz,uv_daverage)
-%[O_ls,G_ls,bnew,C] = inversion_leastSquare_sparse_2019(U,V,Z,dz,uv_daverage)
+function [O_ls,G_ls,bnew,C] = inversion_leastSquare_sparse_2019(U,V,Z,dz,H,uv_daverage)
+%[O_ls,G_ls,bnew,C] = inversion_leastSquare_sparse_2019(U,V,Z,dz,H,uv_daverage)
 % Prior to running this remove all bad data points above, below, or in the
-% glider dive.
-% dz is desired vertical resolution, but should not be much smaller than
+% glider dive. Remove any profiles with <2 bins of data.
+% dz is desired vertical resolution, but should not be smaller than
 % the bin length
+% H is the max depth of the water column
 % U is measured east-west velocities from ADCP
 % V is measured north-south velocities from ADCP
 % Z is the measurement depths of U and V
@@ -16,10 +17,9 @@ function [O_ls,G_ls,bnew,C] = inversion_leastSquare_sparse_2019(U,V,Z,dz,uv_dave
 % This function's purpose is to take velocity measurements from a glider
 % mounted ADCP and separate the ocean velocity and glider velocity from
 % each of these measurements.
+
 %% To-do list
-%  1) Chop off any measurements from below max glider depth or pressure
-%       This might happen before the data gets here but I have to check
-%  2) Need to add curvature-minimizing smoothness constraint
+%  1) Need to add curvature-minimizing smoothness constraint
 
 %% QA/QC Step 1 Check that all depths have data associated with them
 
@@ -43,17 +43,15 @@ nd = nbin*nt;         % G dimension (1)
 
 % Check to see if orientation of UVZ is correct
 if nbin>nt
-    disp('nbin>nt Check dimensions of the inputs are [profiles bins]')
+    error('nbin>nt Check dimensions of the inputs are [profiles bins]')
 end
 
-% eqn(21) Unknowns are the sum of the ocean velocities plus the CTD
-% velocities for each ensemble
-H = floor(max(Z(:))); % max measurement depth for this particular file 
-bedge = 0:dz:H;       % define the edges of the bins
+% Define the edges of the bins
+bedge = 0:dz:floor(max(Z(:)));  
 
 %% Check that each bin has data in it
 
-meas=zeros(length(bedge)-1,1); %pre allocate memory
+meas=zeros(length(bedge)-1,1); % pre allocate memory
 for k=1:length(bedge)-1
     % Creates index of Z values that fall inside the bin edges
     ii= Z >= bedge(k) & Z < bedge(k+1);
@@ -61,31 +59,35 @@ for k=1:length(bedge)-1
     clear ii;
 end
 
-bnew = bedge(1:end-1) + dz/2; % These are bin centers
-
-if size(bnew)==[1,1]
-    error('Desired profile resolution, dz, is too large for depth of profile')
-end
-
+% Creathe bin centers array
+bnew = bedge(1:end-1) + dz/2;
 
 % Chop off the top of the profile that does not have data 
-ii=meas > 0;                %Finds all bins with data
+ii=meas > 0;                %True for all bins with data
 ij = find(ii, 1, 'first');  %Finds first bin with data
 bnew(1:ij-1)=[];            %Removes all bins above the first with data
-z1=bnew(1);                 %z1 is the depth of the midpoint of the first bin with data
+z1=bnew(1);                 %z1 is the depth of the center of the first bin with data
 
 %% Create and populate G
 
-nz=length(bnew); % number of ocean velocities desired
+nz=length(bnew); % number of ocean velocities desired in output profile
 nm = nz + nt; % G dimension (2), number of unknowns
+
+% This error check is related to the surface velocity constraint we apply
+% later. If there are too few bins, we cannot remove the surface velocity.
+if nz<4
+    error('Desired profile resolution, dz, is too large for depth of profile. Not enough depth bins for inversion')
+end
 
 % Let's build the corresponding coefficient matrix G 
 G = zeros(nd,nm);
 
+% Indexing of the G matrix was taken from Todd et al. 2012
 for ii = 1:nt % number of adcp profiles per cast
     for jj = 1:nbin % number of measured bins per profile
         
-  % We will skip this (leave it = 0) if U(nt(ii),nbin(jj)) = nan
+  % We will skip this (leave it = 0) if U(nt(ii),nbin(jj)) = nan. This
+  % leads to true values in G where there is finite data.
         if isfinite(U(ii,jj))
             
             % This section will take care of the Uctd part of the matrix
@@ -99,9 +101,9 @@ for ii = 1:nt % number of adcp profiles per cast
             % value
             dx=abs(bnew-Z(ii,jj));      
             % Find the minimum of these differences
-            minx = min(dx);
+            minx = nanmin(dx);
             % Finds bnew index of the first match of Z and bnew
-            idx = find((dx-minx)==0,1);  %% Need to get rid of 'find'      
+            idx = find((dx-minx)==0,1);      
             G((nbin*(ii-1))+jj,nt+idx) = 1;       
             clear dx minx idx
         end % of isfinite(U) switch
@@ -110,6 +112,7 @@ for ii = 1:nt % number of adcp profiles per cast
 end % of ii
 clear ii jj
 
+% pcolor(G) shading faceted
 %% Reshape U and V into the d format
 
 d_u = U.'; % transpose
@@ -126,7 +129,7 @@ d_v = d_v(:);
 % below that should have already been removed.
 constraint=[zeros(1,nt),  z1/2 (z1/2+dz/2) repmat(dz,1,nz-3) dz/2];
 
-% To find see we use the equation of the norm and set norm=1 because we
+% To find C, we use the equation of the norm and set norm=1 because we
 % desire unity. The equation requires we take the sum of the squares of the
 % entries in constraint.
 sqr_constraint=constraint.*constraint;
@@ -143,10 +146,10 @@ dv = [d_v; C*uv_daverage(2)];
 
 d = complex(du,dv);
 Gstar = [G; (C/H)*constraint];
-
 %% INVERSION OF THE SPARSE MATRIX
  
 Gs=sparse(Gstar);
+
 ms = ((Gs'*Gs)\Gs')*d; % Least square inverse solution
 
 
