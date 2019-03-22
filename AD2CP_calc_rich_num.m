@@ -2,8 +2,8 @@
 % By using the shear data calculcated from data collected by the AD2CP and
 % buoyancy frequency calculated from glider data, richardson number can be
 % found. The AD2CP data is split by segments of the glider mission and
-% depth bins. So, the bouyancy frequency variable will need to be modified
-% to have the same form.
+% depth bins. So, the bouyancy frequency variable will need averaged in the
+% same way so that shear and buoyancy fequency have the same shape.
 
 % Sam Coakley
 % 2/28/2019
@@ -22,19 +22,20 @@ g_data=load([data_path deployment '_dgroup.mat']);
 
 % Depth of tops of bins
 grid_bin=a_data.grid_bin;
+dz=grid_bin(2)-grid_bin(1);
 % Shear magnitude grid
 s_maggrid=a_data.s_maggrid;
 
 %% Calculate buoyancy frequency N2
 
 % Calculate profile by profile N2 not segment by segment
-% Sorts the variables so depth is monotonic increasing
+% Sorts the variables so depth is monotonic increasing in each profile
 % Removes Nans from glider data
 [g_time, g_dep, N2]=calc_dgroup_N2(g_data.dgroup);
 
 %% Grid N2 data [bin x profile]
 % Need to make N2 a segment variable by averaging together each profile in
-% a segment at a parictular depth
+% a segment at the depth of the bin centers
 % Start by putting the glider data on a bin by profile grid
 
 % Find total number of profiles
@@ -54,13 +55,14 @@ for ii=1:prof_count-1
     prof_N2 =N2(profile_ind(ii):(profile_ind(ii+1)-1));
     prof_time=g_time(profile_ind(ii):(profile_ind(ii+1)-1));
     
-    % Average data together that is inside the same bin
-    for jj=2:bin_num
-        % Find the indexs of data inside one bin
-        bin_ind=find(prof_dep>=grid_bin(jj-1) & prof_dep<grid_bin(jj));
+    % Average data together that is inside the same depth bin
+    for jj=1:bin_num
+        % Find the indexs of data inside one bin. grid_bin is bin centers
+        % so we find values around it and average into the bin
+        bin_ind=find(prof_dep>=(grid_bin(jj)-(dz./2)) & prof_dep<(grid_bin(jj))+(dz./2));
         % Average data in that bin
-        N2_grid(jj-1,ii)=nanmean(prof_N2(bin_ind));  
-        % N2_grid will not be filled to near the last bin because it is
+        N2_grid(jj,ii)=nanmean(prof_N2(bin_ind));  
+        % N2_grid may not be filled to the last bin because it is
         % calculated from the ctd on the glider and the AD2CP samples below
         % the max depth of the glider
     end    
@@ -92,6 +94,8 @@ ri_grid=N2_seggrid./(s_maggrid).^2;
 segment_start=segs;
 save([data_path deployment '_rich_num_grid.mat'], 'ri_grid', 'N2_grid', 'profile_time','segment_start')
 %% Plot Richardson number
+%%%%%%%%%% See AD2CP_plotting.m for better plotting methods %%%%%%%%%%%%%%%
+
 % Not sure what the best way to represent this is. Thinking that pcolorjw
 % with colors corresponding to values is the best way but I can't figure
 % out how to do that without regularly spaced values.
@@ -123,29 +127,6 @@ xlabel('Segment number')
 ylabel('Depth [m]')
 title([deployment ': Richardson Number [Vertical resolution:' ...
     num2str(grid_bin(2)-grid_bin(1)) 'm]'],'Interpreter','none')
-print([fig_path 'rich_num_cs'],'-dpng')
-close all
+% print([fig_path 'rich_num_cs'],'-dpng')
+% close all
 clear ax cb cb_label
-
-%% Make a descriptive figure with sub plots
-
-% Want to make a figure with subplots of (1)velocity magnitude, (2)
-% buoyancy frequency, (3)richardson number
-
-
-% figure(1)
-% hold on
-% subplot(3,1,1)
-% load([data_path deployment '_ocean_velo_grid.mat']);
-% vel_mag_grid=(u_grid.^2 + v_grid.^2).^(0.5);
-% contourf(segs,-grid_bin,vel_mag_grid)
-% 
-% 
-% 
-% subplot(3,1,2)
-% contourf(segs,-grid_bin,N2_seggrid)
-% 
-% 
-% subplot(3,1,3)
-% contourf(1:length(segs),-grid_bin,ri_grid);
-
