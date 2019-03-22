@@ -119,22 +119,11 @@ if run_inv==1 % Only run this loop if user input confirms
         u(nan_ens==2,:)=[];
         v(nan_ens==2,:)=[];
         z(nan_ens==2,:)=[];
-% %         %%% This chops ad2cp bins not depth bins. I want to remove depth
-% %         %%% bins from the inversion that dont have enough data 
-% % %         % Check amount of NaNs in each bin for this segment of data and
-% % %         % chop bins that have too high of a percent NaN
-% % %         percent_good=(sum(~isnan(u),1))./size(u,1); % Find the percent of good data in each bin
-% % %         last_good_bin=find(percent_good>0.90,1,'last'); % Find the last bin with 90% good data
-% % %         u=u(:,1:last_good_bin); % Trim this segment to only bins with mostly good data
-% % %         v=v(:,1:last_good_bin);
-% % %         z=z(:,1:last_good_bin);
 
         if (floor((nanmax(z(:))-nanmin(z(:)))/dz))>3  ... % Only do the inversion if there is enough bins
                 && (nansum(isnan(u(:)))/length(u(:)))<=data_threshold
         [tO_ls,tG_ls,tbnew,tC] = inversion_leastSquare_sparse_2019...
             (u,v,z,dz,seg_mean_depth(jj),[DRx(jj) DRy(jj)]);
-
-        % Maybe cut nans below max depth here
         
         O_ls=[O_ls; tO_ls];
         G_ls=[G_ls; tG_ls];
@@ -183,9 +172,11 @@ vgrid=nan([bin_num prof_num]);
 % Create a reference array for bin depth index
 grid_bin=(d_min:dz:d_max)';
 
-% Populate the grid
-profile_ind=[0; find(diff(bnew)<0)]+1; % Index of the start of each profile
+% bnew is only negative when changing from profile to profile so we use
+% bnew to create a profile index and add 1 b/c diff returns N-1 elements
+profile_ind=[0; find(diff(bnew)<0)]+1;
 
+% Populate the grid
 for ii=1:length(profile_ind)-1
     if ~isnan(profile_ind(ii))
         % Grabs one profile of data
@@ -193,7 +184,7 @@ for ii=1:length(profile_ind)-1
         prof_u   =u(profile_ind(ii):profile_ind(ii+1)-1)';
         prof_v   =v(profile_ind(ii):profile_ind(ii+1)-1)';
     
-        % Finds the depths to at which to insert this data into the grid
+        % Finds the depths at which to insert this data into the grid
         [~, grid_start]=min(prof_bins);
         [~, grid_end]=max(prof_bins);
     
@@ -205,7 +196,7 @@ for ii=1:length(profile_ind)-1
 end
 
 % QA/QC to remove physically impossible velocities
-vel_threshold=1.5;
+vel_threshold=1.5; % 1.5 m/s
 vel_ind= abs(ugrid)>vel_threshold | abs(vgrid)>vel_threshold ;
 ugrid(vel_ind)=NaN;
 vgrid(vel_ind)=NaN;
