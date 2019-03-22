@@ -3,6 +3,10 @@ This repository contains step by step instructions on how to process Slocum glid
 
 This process requires both the dgroup data from the Slocum glider and the AD2CP data from the Nortek AD2CP.
 
+Dependencies:
+Slocum Power Tools: https://github.com/kerfoot/spt
+
+
 The first step in the process is AD2CP_mag_correct.m which corrects the heading data stored in the AD2CP file. This correction is necessary because the AD2CP does not account for the changes in the magnetic field as the pitch battery of the glider moves.
 
 The second step is the AD2CP_beam2enu.m which converts the beam velocities recorded by the AD2CP to East/North/Up direction velocities. 
