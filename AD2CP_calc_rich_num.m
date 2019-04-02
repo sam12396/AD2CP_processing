@@ -87,46 +87,37 @@ for jj=1:length(segs)
     N2_seggrid(:,jj) =nanmean(N2_grid(:,seg_time),2);
 end
 
+%% Build grid of profile N2 with full depth resolution
+% Create 1m resolution bin centers
+bin1m=0.5:1:ceil(max(g_dep))-0.5;
+
+% Preallocate memory
+N2_grid1m=nan(length(bin1m),length(profile_ind));
+for ii=1:length(profile_ind)-1
+    % Grab one profile of data
+    prof_dep=g_dep(profile_ind(ii):(profile_ind(ii+1)-1));
+    prof_N2 =N2(profile_ind(ii):(profile_ind(ii+1)-1));
+    prof_time=g_time(profile_ind(ii):(profile_ind(ii+1)-1));
+    
+    % Average data together that is inside the same depth bin
+    for jj=1:length(bin1m)
+        % Find the indexs of data inside one bin. bin1m is bin centers
+        % so we find values around it and average into the bin
+        bin_ind=find(prof_dep>=(bin1m(jj)-(1./2)) & prof_dep<(bin1m(jj))+(1./2));
+        % Average data in that bin
+        N2_grid1m(jj,ii)=nanmean(prof_N2(bin_ind));  
+        % N2_grid1m may not be filled to the last bin because it is
+        % calculated from the ctd on the glider and the AD2CP samples below
+        % the max depth of the glider. The calculation of N2 also chops one
+        % depth off each profile
+    end    
+    profile_time(ii)=nanmean(prof_time);
+    clear prof_*
+end
+
 %% Calculate Richardson number
 % Ri=N^2/(du/dz)^2
 
 ri_grid=N2_seggrid./(s_maggrid).^2;
 segment_start=segs;
-save([data_path deployment '_rich_num_grid.mat'], 'ri_grid', 'N2_grid', 'profile_time','segment_start')
-%% Plot Richardson number
-%%%%%%%%%% See AD2CP_plotting.m for better plotting methods %%%%%%%%%%%%%%%
-
-% Not sure what the best way to represent this is. Thinking that pcolorjw
-% with colors corresponding to values is the best way but I can't figure
-% out how to do that without regularly spaced values.
-
-% Define colormap
-cmap=cmocean('speed');
-cmap=cmap(1:.75*length(cmap),:);
-% Define color bar limits based on physics
-% Ri<1/4 shows shear overcoming stratification
-contours=[0 0.25 1];
-
-% % Grab as many colors as there are contours
-% cmap=cmap(1:floor(length(cmap)./length(contours)):end,:);
-
-figure(1)
-contourf(1:length(segs),-grid_bin,ri_grid,contours);
-%pcolorjw(1:length(segs),-grid_bin,ri_grid)
-ax=gca;
-hold on
-colormap(cmap);
-cb=colorbar;
-caxis([min(contours) max(contours)])
-cb.Ticks=contours;
-%shading interp
-%contour(1:length(segs),-grid_bin,ri_grid,[0.25 0.25],'k');
-cb_label=get(cb,'Label');
-set(cb_label,'String','Richardson Number');
-xlabel('Segment number')
-ylabel('Depth [m]')
-title([deployment ': Richardson Number [Vertical resolution:' ...
-    num2str(grid_bin(2)-grid_bin(1)) 'm]'],'Interpreter','none')
-% print([fig_path 'rich_num_cs'],'-dpng')
-% close all
-clear ax cb cb_label
+save([data_path deployment '_rich_num_grid.mat'], 'ri_grid', 'N2_grid', 'profile_time','segment_start', 'N2_grid1m', 'bin1m')
