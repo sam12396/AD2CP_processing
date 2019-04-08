@@ -116,8 +116,9 @@ for ii=1:length(profile_ind)-1
 end
 
 %% Calculate Richardson number
-% Ri=N^2/(du/dz)^2
-
+% Ri=N^2/(dU/dz)^2
+% Reduced Shear= 4N^2 - (dU/dz)^2
 ri_grid=N2_seggrid./(s_maggrid).^2;
 segment_start=segs;
-save([data_path deployment '_rich_num_grid.mat'], 'ri_grid', 'N2_grid', 'profile_time','segment_start', 'N2_grid1m', 'bin1m')
+red_shear=4.*N2_seggrid - s_maggrid.^2;
+save([data_path deployment '_rich_num_grid.mat'], 'red_shear', 'ri_grid', 'N2_grid', 'profile_time','segment_start', 'N2_grid1m', 'bin1m')

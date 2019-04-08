@@ -14,6 +14,8 @@
 % in ru31 data
 % 
 % 3/20/19: Added water column depth in black on a seperate axis
+%
+% 4/5/19: Adding Reduced shear as a plotted variable
 
 %% Starters
 clear all;close all;
@@ -41,6 +43,7 @@ edge_grid_bin=grid_bin-dz./2;
 N2_grid=ri_data.N2_grid1m;
 N2_time=ri_data.profile_time;
 ri_grid=ri_data.ri_grid;
+red_shear=ri_data.red_shear;
 
 % Velocity
 ugrid=vel_data.ugrid;
@@ -64,7 +67,7 @@ bb = beta2bb(beta, real(bb_sal), lambda);
 bb_grid=nan(length(g_bin),length(segs));
 for kk=1:length(segs)
     seg_ind= bb(:,1)>=segs(kk) & bb(:,1)<sege(kk);
-    seg_bb=bb(prof_ind,:);
+    seg_bb=bb(seg_ind,:);
     
     for jk=1:length(g_bin)-1
         ds_ind= seg_bb(:,2)>=g_bin(jk) & seg_bb(:,2)<g_bin(jk+1);
@@ -163,7 +166,7 @@ tcmap=cmocean('thermal');
 scmap=cmocean('haline');
 dcmap=cmocean('dense');
 
-% Plot temperature
+%% Plot temperature
 figure(1)
 tax=axes;
 % Plot the variable on one axis
@@ -216,7 +219,7 @@ if exist('pivot_time','var')
 end
 close
 
-% Plot salinity
+%% Plot salinity
 % subplot(3,2,3)
 figure(2)
 sax=axes;
@@ -253,7 +256,7 @@ if exist('pivot_time','var')
 end
 close
 
-% Plot density
+%% Plot density
 %subplot(3,2,5)
 figure(3)
 dax=axes;
@@ -289,7 +292,7 @@ if exist('pivot_time','var')
     print([fig_path pivot_str '_' end_str '_dens_' num2str(g_dz) 'm_cs'],'-dpng');
 end
 close
-%% Plotting shear, N2, and rich num
+%% Plotting shear, N2, and rich num and red shear
 % Shear magnitude and rich num are on the same grid but N2 is on a bin x
 % profile grid.
 % Make colorbar limits for each variable
@@ -307,9 +310,9 @@ smclim=[0 (smm+std_threshold*sms)];
 n2cmap=cmocean('speed');
 smcmap=cmocean('speed');
 Rcmap=cmocean('balance');
+RScmap=cmocean('balance');
 
-
-% Plot N2
+%% Plot N2
 figure(4)
 n2ax=axes;
 pcolorjw(N2_time,-g_bin(1:size(N2_grid,1)),N2_grid)
@@ -345,7 +348,7 @@ if exist('pivot_time','var')
 end
 close
 
-%subplot(3,2,4)
+%% Plot shear mag
 figure(5)
 smax=axes;
 pcolorjw(segs,-edge_grid_bin,s_maggrid)
@@ -380,7 +383,7 @@ if exist('pivot_time','var')
 end
 close
 
-% Plot rich num
+%% Plot rich num
 % Need an even number of contours
 contour_start=-3.5;
 contour_end=3.5;
@@ -397,7 +400,6 @@ nmap=Rcmap(cinds,:);
 % Make proper tick position and tick labels
 ticks=round(linspace(contour_start,contour_end,num_c+1),2);
 
-%subplot(3,2,6)
 figure(6)
 Rax=axes;
 contourf(segs,-edge_grid_bin,real(log10(ri_grid)),[contour_start:contour_step:contour_end]);
@@ -432,6 +434,58 @@ if exist('pivot_time','var')
 end
 close
 
+%% Plot reduced shear
+% Reduced shear is similar to Richardson number except that the critical
+% value is 0 instead of 1/4
+% Need an even number of contours
+contour_start=-0.01;
+contour_end=0.01;
+contour_step=0.002;
+num_c=length(contour_start:contour_step:contour_end);
+
+% Adjust the colormap. Need to make the amount of colors=the # of contour
+% steps. Want transition from red to blue to be sharp and exactly at 0
+csize=length(RScmap);
+% Want num_c/2 colors in red and num_c/2 in blue
+cinds=floor(linspace(1,ceil(csize/4),num_c/2));
+cinds=[cinds, floor(linspace(ceil(3*csize/4),csize,num_c/2))];
+nmap=RScmap(cinds,:);
+% Make proper tick position and tick labels
+ticks=round(linspace(contour_start,contour_end,num_c+1),2);
+
+figure(7)
+RSax=axes;
+contourf(segs,-edge_grid_bin,red_shear,[contour_start:contour_step:contour_end]);
+dep_ax=axes;
+pcolorjw(segs,-f_grid_bin,seg_mean_depth);
+dep_ax.Colormap=[0,0,0];
+linkaxes([dep_ax,RSax]);
+dep_ax.Visible='off';
+dep_ax.XTick=[];
+dep_ax.YTick=[];
+set([RSax,dep_ax],'Position',[.08 .2 .78 .63]);
+RScb = colorbar(RSax,'Position',[0.87 .2 .03 .63]);
+shading(RSax,'interp'); grid(RSax,'on');
+set(RSax,'fontsize',siz_text)
+RSax.CLim=[contour_start contour_end];
+RSax.Colormap=nmap;
+datetick(RSax,'x',6)
+ylabel(RSax,'Depth [m]'); ylim(RSax,Ylim);
+xlim(RSax,Xlim);
+RScb_label=get(RScb,'Label');
+set(RScb_label,'String','[no dim]');
+title(RSax,[deployment ' Reduced Shear ' num2str(dz) 'm Resolution'],'Interpreter','none','fontsize',siz_title)
+set(gcf,'PaperPosition',[0 0 plot_width plot_height])
+wysiwyg
+
+print([fig_path 'full_red_shear_' num2str(dz) 'm_cs'],'-dpng');
+if exist('pivot_time','var')
+    xlim([segs(1) pivot_datenum])
+    print([fig_path start_str '_' pivot_str '_red_shear_' num2str(dz) 'm_cs'],'-dpng');
+    xlim([pivot_datenum sege(end)])
+    print([fig_path pivot_str '_' end_str '_red_shear_' num2str(dz) 'm_cs'],'-dpng');
+end
+close
 %% Plotting component velocity and component shear
 std_threshold=3;
 % Make colorbar limits for each variable and center at 0
@@ -457,7 +511,7 @@ uscmap=cmocean('delta');
 vscmap=cmocean('delta');
 
 
-% Plot U velocity
+%% Plot U velocity
 figure(7)
 uax=axes;
 pcolorjw(segs,-edge_grid_bin,ugrid)
@@ -492,7 +546,7 @@ if exist('pivot_time','var')
 end
 close
 
-% Plot V velocity
+%% Plot V velocity
 figure(8)
 vax=axes;
 pcolorjw(segs,-edge_grid_bin,vgrid)
@@ -527,7 +581,7 @@ if exist('pivot_time','var')
 end
 close
 
-% Plot U shear
+%% Plot U shear
 figure(9)
 usax=axes;
 pcolorjw(segs,-edge_grid_bin,usgrid)
@@ -562,7 +616,7 @@ if exist('pivot_time','var')
 end
 close
 
-% Plot V Shear
+%% Plot V Shear
 figure(10)
 vsax=axes;
 pcolorjw(segs,-edge_grid_bin,vsgrid)
