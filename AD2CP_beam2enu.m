@@ -220,8 +220,6 @@ zrng = trim_pressure(k) + zrng; % this is a real bin depth now
 
 % Convert the beam velocity data to ENU velocity data.
 % Only convert the front beams if downcast and back beams for upcast
-% Is the setting of 1 for the last argument correct? I do not understand
-% that parameter. Why was the bottom track 0
     if trim_pitch(k) < -15
         [enu124] = Xform(beam124,T124,trim_head(k),trim_pitch(k),trim_roll(k),1);
         X.r(kk,:) = zrng.';  % Creates a field with the real bin depth

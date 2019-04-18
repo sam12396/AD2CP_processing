@@ -101,7 +101,8 @@ if run_inv==1 % Only run this loop if user input confirms
 
         if isnan(dz) 
             % How do we want to set dz to? 
-            dz=ceil(z(1,2)-z(1,1)).*2; %Desired resolution of final profile
+            resolution=2
+            dz=ceil(z(1,2)-z(1,1)).*resolution; %Desired resolution of final profile
         end
         
         % Make all values below the depth of the water column NaN because
@@ -119,7 +120,7 @@ if run_inv==1 % Only run this loop if user input confirms
         u(nan_ens==2,:)=[];
         v(nan_ens==2,:)=[];
         z(nan_ens==2,:)=[];
-
+        
         if (floor((nanmax(z(:))-nanmin(z(:)))/dz))>3  ... % Only do the inversion if there is enough bins
                 && (nansum(isnan(u(:)))/length(u(:)))<=data_threshold
         [tO_ls,tG_ls,tbnew,tC] = inversion_leastSquare_sparse_2019...
@@ -196,10 +197,11 @@ for ii=1:length(profile_ind)-1
 end
 
 % QA/QC to remove physically impossible velocities
-vel_threshold=1.5; % 1.5 m/s
-vel_ind= abs(ugrid)>vel_threshold | abs(vgrid)>vel_threshold ;
+vel_threshold=2; % m/s
+vel_ind= sqrt(ugrid.^2+vgrid.^2) > vel_threshold;
 ugrid(vel_ind)=NaN;
 vgrid(vel_ind)=NaN;
+
     save([data_path deployment '_ocean_velo_grid.mat'], 'ugrid', 'vgrid', 'grid_bin', 'seg_start', 'seg_end');
     clear prof_u prof_v prof_bins grid_start grid_end
 %% Plot the gridded ocean velocity data

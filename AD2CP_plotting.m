@@ -435,12 +435,13 @@ end
 close
 
 %% Plot reduced shear
-% Reduced shear is similar to Richardson number except that the critical
-% value is 0 instead of 1/4
+% Reduced shear is similar to Richardson number but you solve the
+% inequality to make the critical value 0
+% Here the critical value of the Ri num was 1 qnd for reduced shear it is 0
 % Need an even number of contours
-contour_start=-0.01;
-contour_end=0.01;
-contour_step=0.002;
+contour_start=-0.003;
+contour_end=0.003;
+contour_step=0.001;
 num_c=length(contour_start:contour_step:contour_end);
 
 % Adjust the colormap. Need to make the amount of colors=the # of contour
@@ -456,6 +457,8 @@ ticks=round(linspace(contour_start,contour_end,num_c+1),2);
 figure(7)
 RSax=axes;
 contourf(segs,-edge_grid_bin,red_shear,[contour_start:contour_step:contour_end]);
+hold on
+contour(segs,-edge_grid_bin,red_shear,[0 0],'LineWidth', 1.5, 'color', 'k');
 dep_ax=axes;
 pcolorjw(segs,-f_grid_bin,seg_mean_depth);
 dep_ax.Colormap=[0,0,0];

@@ -2,7 +2,7 @@
 % Sam Coakley: given to me by Travis Miles on 2/13/19
 % This script is used to concatenate all of the data files into one and add
 % a new field of magnetically-corrected heading to the data set.
-% This script is set-up 1 in processing glider mounted AD2CP data.
+% This script is step 1 in processing glider mounted AD2CP data.
 
 %%
 clear all;close all;
@@ -76,8 +76,6 @@ z=zt';
 time=timet';
 
 clear headt pitcht rollt pressuret xt yt zt timet timeBT
-
-% save([data_path 'Glider_ad2cp_full.mat'], 'head','pitch','roll','pressure','x','y','z','time')
 
 XYZ_original=[x y z];
 %% Pitch Dependent magnetic heading correction
