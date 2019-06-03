@@ -1,8 +1,10 @@
 %% Magnetic Correction processing for AD2CP
-% Sam Coakley: given to me by Travis Miles on 2/13/19
 % This script is used to concatenate all of the data files into one and add
 % a new field of magnetically-corrected heading to the data set.
 % This script is step 1 in processing glider mounted AD2CP data.
+
+% 2/13/19
+% Sam Coakley
 
 %%
 clear all;close all;
